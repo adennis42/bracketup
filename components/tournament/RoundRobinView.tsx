@@ -1,0 +1,323 @@
+'use client';
+
+import { useState } from 'react';
+import { Tournament, RoundRobinMatch } from '@/types/tournament';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  calculateStandings,
+  getTeamDisplayName,
+  getAllRoundsComplete,
+} from '@/lib/tournament-logic';
+import { generateEliminationBracket } from '@/lib/tournament-logic';
+import { ChevronRight, ChevronLeft, CheckCircle2, Clock, Trophy } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface RoundRobinViewProps {
+  tournament: Tournament;
+  onUpdate: (t: Partial<Tournament>) => void;
+}
+
+export default function RoundRobinView({ tournament, onUpdate }: RoundRobinViewProps) {
+  const [selectedMatch, setSelectedMatch] = useState<RoundRobinMatch | null>(null);
+  const [score1, setScore1] = useState('');
+  const [score2, setScore2] = useState('');
+  const [activeTab, setActiveTab] = useState<'matches' | 'standings'>('matches');
+
+  const currentRound = tournament.currentRound ?? 1;
+  const totalRounds = tournament.totalRounds ?? 1;
+  const roundMatches = tournament.roundRobinMatches.filter((m) => m.round === currentRound);
+  const standings = calculateStandings(tournament.teams, tournament.roundRobinMatches);
+
+  const teamName = (id: string) => getTeamDisplayName(
+    tournament.teams.find((t) => t.id === id)!,
+    tournament.players
+  );
+
+  const openScoreDialog = (match: RoundRobinMatch) => {
+    setSelectedMatch(match);
+    setScore1(match.team1Score?.toString() ?? '');
+    setScore2(match.team2Score?.toString() ?? '');
+  };
+
+  const submitScore = () => {
+    if (!selectedMatch) return;
+    const s1 = parseInt(score1);
+    const s2 = parseInt(score2);
+    if (isNaN(s1) || isNaN(s2)) return;
+
+    const winnerId = s1 > s2 ? selectedMatch.team1Id : s2 > s1 ? selectedMatch.team2Id : null;
+
+    const updatedMatches = tournament.roundRobinMatches.map((m) =>
+      m.id === selectedMatch.id
+        ? { ...m, team1Score: s1, team2Score: s2, winnerId, status: 'complete' as const }
+        : m
+    );
+
+    onUpdate({ roundRobinMatches: updatedMatches });
+    setSelectedMatch(null);
+  };
+
+  const advanceRound = () => {
+    if (currentRound < totalRounds) {
+      onUpdate({ currentRound: currentRound + 1 });
+    }
+  };
+
+  const goToPrevRound = () => {
+    if (currentRound > 1) {
+      onUpdate({ currentRound: currentRound - 1 });
+    }
+  };
+
+  const roundComplete = roundMatches.length > 0 && roundMatches.every((m) => m.status === 'complete');
+  const allComplete = getAllRoundsComplete(tournament.roundRobinMatches);
+
+  const startElimination = () => {
+    // Seed teams by standings
+    const seededTeamIds = standings.map((s) => s.teamId);
+    const seededTeams = seededTeamIds
+      .map((id) => tournament.teams.find((t) => t.id === id)!)
+      .filter(Boolean)
+      .map((t, i) => ({ ...t, seed: i + 1 }));
+
+    const elimMatches = generateEliminationBracket(seededTeams);
+    onUpdate({
+      phase: 'elimination',
+      teams: seededTeams,
+      eliminationMatches: elimMatches,
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Tab toggles */}
+      <div className="flex bg-gray-800/60 rounded-xl p-1 gap-1">
+        {(['matches', 'standings'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={cn(
+              'flex-1 py-2 text-sm font-medium rounded-lg transition-all capitalize',
+              activeTab === tab
+                ? 'bg-gray-700 text-white'
+                : 'text-gray-500 hover:text-gray-300'
+            )}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'matches' && (
+        <>
+          {/* Round nav */}
+          <div className="flex items-center justify-between">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={goToPrevRound}
+              disabled={currentRound === 1}
+              className="text-gray-400 disabled:opacity-30"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <div className="text-center">
+              <p className="text-white font-semibold">Round {currentRound}</p>
+              <p className="text-gray-500 text-xs">of {totalRounds}</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={advanceRound}
+              disabled={currentRound === totalRounds || !roundComplete}
+              className="text-gray-400 disabled:opacity-30"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+
+          {/* Match cards */}
+          <div className="space-y-2">
+            {roundMatches.map((match) => {
+              const done = match.status === 'complete';
+              return (
+                <button
+                  key={match.id}
+                  onClick={() => openScoreDialog(match)}
+                  className={cn(
+                    'w-full p-4 rounded-xl border text-left transition-all',
+                    done
+                      ? 'bg-gray-800/40 border-gray-700/50'
+                      : 'bg-gray-800 border-gray-700 hover:border-violet-500/50 hover:bg-gray-800/80'
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Team 1 */}
+                    <div className="flex-1 min-w-0">
+                      <p className={cn(
+                        'font-semibold text-sm truncate',
+                        done && match.winnerId === match.team1Id ? 'text-emerald-400' : 'text-white'
+                      )}>
+                        {teamName(match.team1Id)}
+                      </p>
+                    </div>
+
+                    {/* Score or VS */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {done ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn('text-lg font-bold', match.winnerId === match.team1Id ? 'text-emerald-400' : 'text-gray-400')}>
+                            {match.team1Score}
+                          </span>
+                          <span className="text-gray-600 text-sm">–</span>
+                          <span className={cn('text-lg font-bold', match.winnerId === match.team2Id ? 'text-emerald-400' : 'text-gray-400')}>
+                            {match.team2Score}
+                          </span>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 ml-1" />
+                        </div>
+                      ) : (
+                        <span className="text-gray-600 text-sm font-medium px-2">vs</span>
+                      )}
+                    </div>
+
+                    {/* Team 2 */}
+                    <div className="flex-1 min-w-0 text-right">
+                      <p className={cn(
+                        'font-semibold text-sm truncate',
+                        done && match.winnerId === match.team2Id ? 'text-emerald-400' : 'text-white'
+                      )}>
+                        {teamName(match.team2Id)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {!done && (
+                    <div className="flex items-center gap-1 mt-2">
+                      <Clock className="w-3 h-3 text-gray-600" />
+                      <span className="text-gray-600 text-xs">Tap to enter score</span>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Round status / CTA */}
+          {allComplete ? (
+            <Button
+              onClick={startElimination}
+              className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold"
+            >
+              <Trophy className="w-4 h-4 mr-2" />
+              Start Elimination Bracket
+            </Button>
+          ) : roundComplete && currentRound < totalRounds ? (
+            <Button
+              onClick={advanceRound}
+              className="w-full h-12 bg-violet-600 hover:bg-violet-500 text-white rounded-xl font-semibold"
+            >
+              Next Round →
+            </Button>
+          ) : null}
+        </>
+      )}
+
+      {activeTab === 'standings' && (
+        <div className="space-y-2">
+          {standings.map((s, i) => {
+            const team = tournament.teams.find((t) => t.id === s.teamId)!;
+            const gamesPlayed = s.wins + s.losses + s.ties;
+            return (
+              <div
+                key={s.teamId}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 rounded-xl border',
+                  i === 0 ? 'bg-yellow-500/10 border-yellow-500/30' :
+                  i === 1 ? 'bg-gray-400/10 border-gray-500/30' :
+                  'bg-gray-800 border-gray-700'
+                )}
+              >
+                <span className={cn(
+                  'text-sm font-bold w-5 text-center',
+                  i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-300' : 'text-gray-500'
+                )}>
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-medium text-sm truncate">
+                    {getTeamDisplayName(team, tournament.players)}
+                  </p>
+                  <p className="text-gray-500 text-xs">
+                    {gamesPlayed} played · {s.pointDiff > 0 ? '+' : ''}{s.pointDiff} diff
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-white font-bold text-sm">{s.wins}W</p>
+                  <p className="text-gray-500 text-xs">{s.losses}L{s.ties > 0 ? ` ${s.ties}T` : ''}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Score entry dialog */}
+      <Dialog open={!!selectedMatch} onOpenChange={() => setSelectedMatch(null)}>
+        <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="text-white">Enter Score</DialogTitle>
+          </DialogHeader>
+          {selectedMatch && (
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <p className="text-sm text-gray-300 w-32 truncate">{teamName(selectedMatch.team1Id)}</p>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={score1}
+                    onChange={(e) => setScore1(e.target.value)}
+                    className="bg-gray-800 border-gray-700 text-white h-11 text-center text-lg font-bold w-20"
+                    placeholder="0"
+                  />
+                </div>
+                <Separator className="bg-gray-700" />
+                <div className="flex items-center gap-3">
+                  <p className="text-sm text-gray-300 w-32 truncate">{teamName(selectedMatch.team2Id)}</p>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={score2}
+                    onChange={(e) => setScore2(e.target.value)}
+                    className="bg-gray-800 border-gray-700 text-white h-11 text-center text-lg font-bold w-20"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => setSelectedMatch(null)}
+                  className="flex-1 border border-gray-700 text-gray-400"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={submitScore}
+                  disabled={score1 === '' || score2 === ''}
+                  className="flex-1 bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40"
+                >
+                  Save Score
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

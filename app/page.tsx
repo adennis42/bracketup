@@ -7,7 +7,8 @@ import { Tournament } from '@/types/tournament';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Plus, Trophy, Users, Clock, ChevronRight, Search, Trash2 } from 'lucide-react';
+import { Plus, Trophy, Users, Clock, ChevronRight, Search, Trash2, Download } from 'lucide-react';
+import { exportSeasonCSV, exportPlayerSeasonCSV, downloadCSV } from '@/lib/export';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -117,7 +118,33 @@ export default function HomePage() {
               <span className="text-gray-600 text-xs">{tournaments.length}</span>
             </div>
 
-            {tournaments.length > 3 && (
+            {/* Export buttons */}
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const csv = exportSeasonCSV(tournaments);
+                downloadCSV(csv, 'bracketup-season-tournaments.csv');
+              }}
+              className="flex-1 h-9 border border-gray-700 text-gray-400 hover:text-white text-xs rounded-xl gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5" /> Tournament History
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const csv = exportPlayerSeasonCSV(tournaments);
+                downloadCSV(csv, 'bracketup-season-players.csv');
+              }}
+              className="flex-1 h-9 border border-gray-700 text-gray-400 hover:text-white text-xs rounded-xl gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5" /> Player Stats
+            </Button>
+          </div>
+
+          {tournaments.length > 3 && (
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
                 <Input

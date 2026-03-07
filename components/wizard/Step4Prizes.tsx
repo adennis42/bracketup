@@ -9,12 +9,11 @@ import { cn } from '@/lib/utils';
 
 interface Step4Props {
   data: {
-    entryFeePerTeam: number;
+    entryFeePerPlayer: number;
     firstPercent: number;
     secondPercent: number;
   };
-  teamCount: number;
-  playersPerTeam: number;
+  playerCount: number;
   onChange: (data: Partial<Step4Props['data']>) => void;
   onSubmit: () => void;
   onBack: () => void;
@@ -27,17 +26,17 @@ const PRESET_SPLITS = [
   { label: '50 / 50', first: 50, second: 50 },
 ];
 
-export default function Step4Prizes({ data, teamCount, playersPerTeam, onChange, onSubmit, onBack }: Step4Props) {
+export default function Step4Prizes({ data, playerCount, onChange, onSubmit, onBack }: Step4Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const totalPot = data.entryFeePerTeam * teamCount;
+  const totalPot = data.entryFeePerPlayer * playerCount;
   const firstTeamPayout = (totalPot * data.firstPercent) / 100;
   const secondTeamPayout = (totalPot * data.secondPercent) / 100;
   const splitTotal = data.firstPercent + data.secondPercent;
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (data.entryFeePerTeam < 0) e.fee = 'Entry fee cannot be negative';
+    if (data.entryFeePerPlayer < 0) e.fee = 'Entry fee cannot be negative';
     if (splitTotal !== 100) e.split = 'Percentages must add up to 100%';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -54,7 +53,7 @@ export default function Step4Prizes({ data, teamCount, playersPerTeam, onChange,
     <div className="space-y-6">
       {/* Entry fee */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium text-gray-200">Entry Fee per Team</Label>
+        <Label className="text-sm font-medium text-gray-200">Entry Fee per Player</Label>
         <div className="relative">
           <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <Input
@@ -62,8 +61,8 @@ export default function Step4Prizes({ data, teamCount, playersPerTeam, onChange,
             min={0}
             step={1}
             placeholder="0.00"
-            value={data.entryFeePerTeam || ''}
-            onChange={(e) => onChange({ entryFeePerTeam: parseFloat(e.target.value) || 0 })}
+            value={data.entryFeePerPlayer || ''}
+            onChange={(e) => onChange({ entryFeePerPlayer: parseFloat(e.target.value) || 0 })}
             className="bg-gray-800 border-gray-700 text-white pl-9 h-12 text-base"
           />
         </div>
@@ -71,7 +70,7 @@ export default function Step4Prizes({ data, teamCount, playersPerTeam, onChange,
         {totalPot > 0 && (
           <p className="text-sm text-gray-400">
             Total pot: <span className="text-white font-semibold">{fmt(totalPot)}</span>
-            <span className="text-gray-600 ml-1">({teamCount} teams × {fmt(data.entryFeePerTeam)})</span>
+            <span className="text-gray-600 ml-1">({playerCount} players × {fmt(data.entryFeePerPlayer)})</span>
           </p>
         )}
       </div>
@@ -151,9 +150,7 @@ export default function Step4Prizes({ data, teamCount, playersPerTeam, onChange,
                 <span className="text-sm text-gray-300">{place} ({pct}%)</span>
                 <div className="text-right">
                   <div className="text-white font-semibold text-sm">{fmt(team)} total</div>
-                  {playersPerTeam > 1 && (
-                    <div className="text-gray-500 text-xs">{fmt(team / playersPerTeam)} / player</div>
-                  )}
+                  <div className="text-gray-500 text-xs">{fmt(team / 2)} / player</div>
                 </div>
               </div>
             ))}
@@ -162,7 +159,7 @@ export default function Step4Prizes({ data, teamCount, playersPerTeam, onChange,
       )}
 
       {/* Zero fee note */}
-      {data.entryFeePerTeam === 0 && (
+      {data.entryFeePerPlayer === 0 && (
         <p className="text-gray-500 text-xs text-center">
           No entry fee — prize tracking will be skipped
         </p>

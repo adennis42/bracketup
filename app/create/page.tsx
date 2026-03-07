@@ -43,7 +43,7 @@ export default function CreatePage() {
 
   // Step 4 state
   const [prizes, setPrizes] = useState({
-    entryFeePerTeam: 20,
+    entryFeePerPlayer: 10,
     firstPercent: 60,
     secondPercent: 40,
   });
@@ -74,7 +74,7 @@ export default function CreatePage() {
       event: details.event,
       customEvent: details.customEvent || undefined,
       format: details.format,
-      entryFeePerTeam: prizes.entryFeePerTeam,
+      entryFeePerPlayer: prizes.entryFeePerPlayer,
       prizeSplit: {
         firstPercent: prizes.firstPercent,
         secondPercent: prizes.secondPercent,
@@ -171,12 +171,7 @@ export default function CreatePage() {
           {step === 3 && (
             <Step4Prizes
               data={prizes}
-              teamCount={
-                details.format === 'singles'
-                  ? players.length
-                  : teams.length || Math.ceil(players.length / 2)
-              }
-              playersPerTeam={details.format === 'singles' ? 1 : 2}
+              playerCount={players.length}
               onChange={(d) => setPrizes((prev) => ({ ...prev, ...d }))}
               onSubmit={handleCreateTournament}
               onBack={() => setStep(2)}

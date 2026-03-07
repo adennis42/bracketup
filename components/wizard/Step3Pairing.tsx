@@ -34,6 +34,12 @@ export default function Step3Pairing({ players, teams, onChange, onNext, onBack 
     onChange(newTeams);
   };
 
+  const handleShuffleAll = () => {
+    // Wipe everything and re-randomize all players from scratch
+    const newTeams = randomPairPlayers(players, []);
+    onChange(newTeams);
+  };
+
   const handleAddPresetTeam = () => {
     const p1 = players.find(
       (p) => p.name.toLowerCase() === teamPlayer1.trim().toLowerCase()
@@ -139,17 +145,29 @@ export default function Step3Pairing({ players, teams, onChange, onNext, onBack 
         </div>
       )}
 
-      {/* Shuffle button */}
-      {unpairedPlayers.length >= 2 && (
-        <Button
-          onClick={handleShuffle}
-          variant="outline"
-          className="w-full h-11 border-dashed border-gray-600 text-gray-300 hover:text-white hover:border-violet-500 hover:bg-violet-500/5 rounded-xl"
-        >
-          <Shuffle className="w-4 h-4 mr-2" />
-          {teams.length === 0 ? 'Randomly Pair All Players' : 'Re-shuffle Unpaired Players'}
-        </Button>
-      )}
+      {/* Shuffle buttons */}
+      <div className="flex gap-2">
+        {unpairedPlayers.length >= 2 && (
+          <Button
+            onClick={handleShuffle}
+            variant="outline"
+            className="flex-1 h-11 border-dashed border-gray-600 text-gray-300 hover:text-white hover:border-violet-500 hover:bg-violet-500/5 rounded-xl"
+          >
+            <Shuffle className="w-4 h-4 mr-2" />
+            {teams.length === 0 ? 'Pair All' : 'Pair Remaining'}
+          </Button>
+        )}
+        {teams.length > 0 && (
+          <Button
+            onClick={handleShuffleAll}
+            variant="outline"
+            className="flex-1 h-11 border-dashed border-red-900/50 text-red-400/70 hover:text-red-300 hover:border-red-500/50 hover:bg-red-500/5 rounded-xl"
+          >
+            <Shuffle className="w-4 h-4 mr-2" />
+            Reshuffle All
+          </Button>
+        )}
+      </div>
 
       {/* Teams list */}
       {teams.length === 0 ? (

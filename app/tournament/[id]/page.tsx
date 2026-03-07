@@ -62,7 +62,7 @@ export default function TournamentPage() {
     );
   }
 
-  const totalPot = tournament.entryFeePerTeam * tournament.teams.length;
+  const totalPot = tournament.entryFeePerPlayer * tournament.players.length;
   const fmt = (n: number) =>
     n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 });
 

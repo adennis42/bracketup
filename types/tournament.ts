@@ -59,7 +59,7 @@ export interface Tournament {
   event: EventType;
   customEvent?: string;
   format: FormatType;
-  entryFeePerTeam: number;
+  entryFeePerPlayer: number;
   prizeSplit: PrizeSplit;
   phase: BracketPhase;
   players: Player[];

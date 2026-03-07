@@ -169,30 +169,23 @@ export function generateEliminationBracket(seededTeams: Team[]): EliminationMatc
   const n = seededTeams.length;
   if (n < 2) return [];
 
-  // Find next power of 2
   const bracketSize = nextPowerOf2(n);
-  const numRounds = Math.log2(bracketSize);
+  const numRounds = Math.log2(bracketSize); // e.g. 4 teams → 2 rounds
   const byeCount = bracketSize - n;
 
-  // Build seed list with nulls for byes (byes go to top seeds)
-  // Seeds: [1, 2, 3, ..., n, null * byeCount]
   const seeds: (Team | null)[] = [...seededTeams, ...Array(byeCount).fill(null)];
-
-  // Standard bracket seeding: 1 vs 16, 8 vs 9, 5 vs 12, 4 vs 13, 6 vs 11, 3 vs 14, 7 vs 10, 2 vs 15
-  // We'll use simplified: pair from ends — 1 vs last, 2 vs second-last, etc.
   const firstRoundMatchups = buildFirstRoundMatchups(seeds);
 
   const matches: EliminationMatch[] = [];
-  const totalFirstRoundMatches = bracketSize / 2;
 
-  // Create all match slots
-  for (let round = 1; round <= numRounds; round++) {
-    const matchesInRound = bracketSize / Math.pow(2, round);
+  // Round numbering: round 1 = Finals (1 match), round numRounds = first round (most matches)
+  // This makes round 1 always the championship, matching ROUND_LABELS and winner detection.
+  for (let r = 1; r <= numRounds; r++) {
+    const matchesInRound = Math.pow(2, r - 1); // r=1→1 match, r=2→2, r=numRounds→bracketSize/2
     for (let pos = 1; pos <= matchesInRound; pos++) {
-      const matchId = generateId();
       matches.push({
-        id: matchId,
-        round,
+        id: generateId(),
+        round: r,
         position: pos,
         isBye: false,
         status: 'pending',
@@ -200,15 +193,18 @@ export function generateEliminationBracket(seededTeams: Team[]): EliminationMatc
     }
   }
 
-  // Fill in first round
-  for (let i = 0; i < totalFirstRoundMatches; i++) {
-    const match = matches.find((m) => m.round === 1 && m.position === i + 1)!;
-    const [team1, team2] = firstRoundMatchups[i];
+  // Fill first-round matches (round === numRounds, most matches)
+  const firstRoundMatches = matches
+    .filter((m) => m.round === numRounds)
+    .sort((a, b) => a.position - b.position);
+
+  for (let i = 0; i < firstRoundMatches.length; i++) {
+    const match = firstRoundMatches[i];
+    const [team1, team2] = firstRoundMatchups[i] ?? [null, null];
 
     match.team1Id = team1?.id ?? null;
     match.team2Id = team2?.id ?? null;
 
-    // Auto-advance byes
     if (!team1 || !team2) {
       match.isBye = true;
       match.status = 'complete';
@@ -216,8 +212,36 @@ export function generateEliminationBracket(seededTeams: Team[]): EliminationMatc
     }
   }
 
-  // Wire up next match references and auto-advance bye winners
-  advanceByes(matches, numRounds);
+  // Wire nextMatchId: winner of round r → round r-1 (closer to finals)
+  for (let r = numRounds; r > 1; r--) {
+    const roundMatches = matches
+      .filter((m) => m.round === r)
+      .sort((a, b) => a.position - b.position);
+    const nextRoundMatches = matches
+      .filter((m) => m.round === r - 1)
+      .sort((a, b) => a.position - b.position);
+
+    for (let i = 0; i < roundMatches.length; i++) {
+      const nextMatchPos = Math.ceil((i + 1) / 2);
+      const nextMatch = nextRoundMatches.find((m) => m.position === nextMatchPos);
+      if (nextMatch) {
+        roundMatches[i].nextMatchId = nextMatch.id;
+      }
+    }
+  }
+
+  // Auto-advance bye winners into their next match slot
+  const byeMatches = matches.filter((m) => m.isBye && m.winnerId);
+  for (const byeMatch of byeMatches) {
+    if (!byeMatch.nextMatchId) continue;
+    const nextMatch = matches.find((m) => m.id === byeMatch.nextMatchId);
+    if (!nextMatch) continue;
+    if (!nextMatch.team1Id) {
+      nextMatch.team1Id = byeMatch.winnerId ?? null;
+    } else {
+      nextMatch.team2Id = byeMatch.winnerId ?? null;
+    }
+  }
 
   return matches;
 }
@@ -239,37 +263,6 @@ function buildFirstRoundMatchups(seeds: (Team | null)[]): [Team | null, Team | n
   return matchups;
 }
 
-function advanceByes(matches: EliminationMatch[], numRounds: number) {
-  // Set nextMatchId for all matches
-  for (let round = 1; round < numRounds; round++) {
-    const roundMatches = matches.filter((m) => m.round === round);
-    const nextRoundMatches = matches.filter((m) => m.round === round + 1);
-
-    for (let i = 0; i < roundMatches.length; i++) {
-      const match = roundMatches[i];
-      const nextMatchPos = Math.ceil((i + 1) / 2);
-      const nextMatch = nextRoundMatches.find((m) => m.position === nextMatchPos);
-      if (nextMatch) {
-        match.nextMatchId = nextMatch.id;
-      }
-    }
-  }
-
-  // Advance bye winners into next round
-  const byeMatches = matches.filter((m) => m.isBye && m.winnerId);
-  for (const byeMatch of byeMatches) {
-    if (!byeMatch.nextMatchId) continue;
-    const nextMatch = matches.find((m) => m.id === byeMatch.nextMatchId);
-    if (!nextMatch) continue;
-
-    if (!nextMatch.team1Id) {
-      nextMatch.team1Id = byeMatch.winnerId ?? null;
-    } else {
-      nextMatch.team2Id = byeMatch.winnerId ?? null;
-    }
-  }
-}
-
 function nextPowerOf2(n: number): number {
   let p = 1;
   while (p < n) p *= 2;
@@ -288,13 +281,14 @@ export interface PrizePayout {
 
 export function calculatePayouts(
   teams: Team[],
-  entryFeePerTeam: number,
+  entryFeePerPlayer: number,
   firstPercent: number,
   secondPercent: number,
   firstPlaceTeamId: string,
   secondPlaceTeamId: string
 ): PrizePayout[] {
-  const totalPot = teams.length * entryFeePerTeam;
+  const totalPlayers = teams.reduce((sum, t) => sum + t.playerIds.length, 0);
+  const totalPot = totalPlayers * entryFeePerPlayer;
   const firstTeam = teams.find((t) => t.id === firstPlaceTeamId);
   const secondTeam = teams.find((t) => t.id === secondPlaceTeamId);
 

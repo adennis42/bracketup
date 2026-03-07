@@ -57,10 +57,11 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
         : m
     );
 
-    // Advance winner to next match
+    // Advance winner to next match (round r → round r-1)
     if (selectedMatch.nextMatchId) {
       const nextMatch = updatedMatches.find((m) => m.id === selectedMatch.nextMatchId);
       if (nextMatch) {
+        // Even positions fill team2, odd fill team1
         const isLeftSlot = selectedMatch.position % 2 !== 0;
         updatedMatches = updatedMatches.map((m) =>
           m.id === selectedMatch.nextMatchId
@@ -74,7 +75,7 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
       }
     }
 
-    // Check if tournament is over (finals complete)
+    // Tournament complete when Finals (round === 1, the championship match) is done
     const finalsMatch = updatedMatches.find((m) => m.round === 1);
     if (finalsMatch?.id === selectedMatch.id) {
       onUpdate({
@@ -99,16 +100,18 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
 
   // Prize payouts
   const payouts =
-    champion && runnerUp && tournament.entryFeePerTeam > 0
+    champion && runnerUp && tournament.entryFeePerPlayer > 0
       ? calculatePayouts(
           tournament.teams,
-          tournament.entryFeePerTeam,
+          tournament.entryFeePerPlayer,
           tournament.prizeSplit.firstPercent,
           tournament.prizeSplit.secondPercent,
           champion,
           runnerUp
         )
       : [];
+
+  const totalPot = tournament.entryFeePerPlayer * tournament.players.length;
 
   const fmt = (n: number) =>
     n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
@@ -139,7 +142,7 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
             <DollarSign className="w-4 h-4 text-emerald-400" />
             <p className="text-sm font-semibold text-gray-300">Prize Payouts</p>
             <span className="text-gray-500 text-xs ml-auto">
-              Total: {fmt(tournament.entryFeePerTeam * tournament.teams.length)}
+              Total: {fmt(totalPot)}
             </span>
           </div>
           <div className="space-y-2">

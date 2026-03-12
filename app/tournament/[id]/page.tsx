@@ -112,7 +112,7 @@ export default function TournamentPage() {
         </div>
 
         {/* Body */}
-        <div className="px-4 py-5">
+        <div className="px-4 py-5 overflow-visible">
           {/* Phase indicator */}
           <div className="flex items-center gap-3 mb-5">
             {['round-robin', 'elimination', 'complete'].map((phase, i) => {

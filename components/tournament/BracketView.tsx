@@ -37,10 +37,24 @@ export default function BracketView({ tournament, onMatchClick }: BracketViewPro
     teamId ? tournament.teams.find((t) => t.id === teamId)?.seed : undefined;
 
   return (
-    <div className="overflow-x-auto pb-4 -mx-4 px-4">
+    <div
+      className="pb-4"
+      style={{
+        overflowX: 'auto',
+        overflowY: 'visible',
+        marginLeft: '-1rem',
+        marginRight: '-1rem',
+        paddingLeft: '1rem',
+        paddingRight: '1rem',
+        WebkitOverflowScrolling: 'touch',
+      }}
+    >
       <div
-        className="flex gap-0 min-w-max"
-        style={{ minHeight: `${Math.pow(2, maxRound - 1) * 80}px` }}
+        className="flex gap-0"
+        style={{
+          minWidth: 'max-content',
+          minHeight: `${Math.pow(2, maxRound - 1) * 80}px`,
+        }}
       >
         {rounds.map((round, roundIndex) => {
           const roundMatches = allMatches

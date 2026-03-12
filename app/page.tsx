@@ -12,6 +12,15 @@ import { exportSeasonCSV, exportPlayerSeasonCSV, downloadCSV } from '@/lib/expor
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 
+// Client-only date component — prevents hydration mismatch from relative times
+function ClientDate({ date }: { date: string }) {
+  const [label, setLabel] = useState('');
+  useEffect(() => {
+    setLabel(formatDistanceToNow(new Date(date), { addSuffix: true }));
+  }, [date]);
+  return <span suppressHydrationWarning>{label}</span>;
+}
+
 const EVENT_ICONS: Record<string, string> = {
   'disc-golf-putting': '🥏',
   'disc-golf': '🥏',
@@ -158,10 +167,14 @@ export default function HomePage() {
 
             <div className="space-y-2">
               {filtered.map((t) => (
-                <button
+                // Use div instead of button to avoid nested button (delete btn inside)
+                <div
                   key={t.id}
                   onClick={() => router.push(`/tournament/${t.id}`)}
-                  className="w-full flex items-center gap-3 p-4 rounded-xl bg-gray-800 border border-gray-700 hover:border-gray-600 hover:bg-gray-800/80 text-left transition-all"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && router.push(`/tournament/${t.id}`)}
+                  className="w-full flex items-center gap-3 p-4 rounded-xl bg-gray-800 border border-gray-700 hover:border-gray-600 hover:bg-gray-800/80 text-left transition-all cursor-pointer"
                 >
                   <span className="text-2xl">{EVENT_ICONS[t.event] ?? '🏆'}</span>
                   <div className="flex-1 min-w-0">
@@ -178,7 +191,7 @@ export default function HomePage() {
                       </span>
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {formatDistanceToNow(new Date(t.createdAt), { addSuffix: true })}
+                        <ClientDate date={t.createdAt} />
                       </span>
                     </div>
                   </div>
@@ -191,7 +204,7 @@ export default function HomePage() {
                     </button>
                     <ChevronRight className="w-4 h-4 text-gray-600" />
                   </div>
-                </button>
+                </div>
               ))}
             </div>
 

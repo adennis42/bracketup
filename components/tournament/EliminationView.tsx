@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getTeamDisplayName, calculatePayouts } from '@/lib/tournament-logic';
-import { Trophy, CheckCircle2, Clock, DollarSign } from 'lucide-react';
+import BracketView from './BracketView';
+import { Trophy, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface EliminationViewProps {
@@ -15,19 +16,11 @@ interface EliminationViewProps {
   onUpdate: (t: Partial<Tournament>) => void;
 }
 
-const ROUND_LABELS: Record<number, string> = {
-  1: 'Finals',
-  2: 'Semifinals',
-  3: 'Quarterfinals',
-  4: 'Round of 16',
-};
-
 export default function EliminationView({ tournament, onUpdate }: EliminationViewProps) {
   const [selectedMatch, setSelectedMatch] = useState<EliminationMatch | null>(null);
   const [score1, setScore1] = useState('');
   const [score2, setScore2] = useState('');
-
-  const maxRound = Math.max(...tournament.eliminationMatches.map((m) => m.round), 1);
+  const [view, setView] = useState<'bracket' | 'list'>('bracket');
 
   const teamName = (id?: string | null) => {
     if (!id) return 'TBD';
@@ -37,7 +30,6 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
   };
 
   const openScoreDialog = (match: EliminationMatch) => {
-    if (match.isBye || !match.team1Id || !match.team2Id) return;
     setSelectedMatch(match);
     setScore1(match.team1Score?.toString() ?? '');
     setScore2(match.team2Score?.toString() ?? '');
@@ -47,7 +39,7 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
     if (!selectedMatch) return;
     const s1 = parseInt(score1);
     const s2 = parseInt(score2);
-    if (isNaN(s1) || isNaN(s2) || s1 === s2) return; // No ties in elimination
+    if (isNaN(s1) || isNaN(s2) || s1 === s2) return;
 
     const winnerId = s1 > s2 ? selectedMatch.team1Id! : selectedMatch.team2Id!;
 
@@ -59,29 +51,22 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
 
     // Advance winner to next match (round r → round r-1)
     if (selectedMatch.nextMatchId) {
-      const nextMatch = updatedMatches.find((m) => m.id === selectedMatch.nextMatchId);
-      if (nextMatch) {
-        // Even positions fill team2, odd fill team1
-        const isLeftSlot = selectedMatch.position % 2 !== 0;
-        updatedMatches = updatedMatches.map((m) =>
-          m.id === selectedMatch.nextMatchId
-            ? {
-                ...m,
-                team1Id: isLeftSlot ? winnerId : m.team1Id,
-                team2Id: !isLeftSlot ? winnerId : m.team2Id,
-              }
-            : m
-        );
-      }
+      const isLeftSlot = selectedMatch.position % 2 !== 0;
+      updatedMatches = updatedMatches.map((m) =>
+        m.id === selectedMatch.nextMatchId
+          ? {
+              ...m,
+              team1Id: isLeftSlot ? winnerId : m.team1Id,
+              team2Id: !isLeftSlot ? winnerId : m.team2Id,
+            }
+          : m
+      );
     }
 
-    // Tournament complete when Finals (round === 1, the championship match) is done
+    // Tournament complete when Finals (round === 1) is done
     const finalsMatch = updatedMatches.find((m) => m.round === 1);
     if (finalsMatch?.id === selectedMatch.id) {
-      onUpdate({
-        eliminationMatches: updatedMatches,
-        phase: 'complete',
-      });
+      onUpdate({ eliminationMatches: updatedMatches, phase: 'complete' });
     } else {
       onUpdate({ eliminationMatches: updatedMatches });
     }
@@ -89,16 +74,12 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
     setSelectedMatch(null);
   };
 
-  // Find champion
   const finalsMatch = tournament.eliminationMatches.find((m) => m.round === 1);
   const champion = finalsMatch?.winnerId;
-  const runnerUp = finalsMatch?.winnerId
-    ? finalsMatch.winnerId === finalsMatch.team1Id
-      ? finalsMatch.team2Id
-      : finalsMatch.team1Id
+  const runnerUp = champion
+    ? champion === finalsMatch?.team1Id ? finalsMatch?.team2Id : finalsMatch?.team1Id
     : undefined;
 
-  // Prize payouts
   const payouts =
     champion && runnerUp && tournament.entryFeePerPlayer > 0
       ? calculatePayouts(
@@ -111,18 +92,16 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
         )
       : [];
 
-  const totalPot = tournament.entryFeePerPlayer * tournament.players.length;
-
   const fmt = (n: number) =>
     n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 
-  // Group matches by round (display highest round number first = earliest round)
-  const rounds = Array.from(new Set(tournament.eliminationMatches.map((m) => m.round))).sort(
-    (a, b) => b - a
-  );
+  // List view: group by round for alternative display
+  const maxRound = Math.max(...tournament.eliminationMatches.map((m) => m.round), 1);
+  const ROUND_LABELS: Record<number, string> = { 1: 'Finals', 2: 'Semifinals', 3: 'Quarterfinals', 4: 'Round of 16' };
+  const rounds = Array.from({ length: maxRound }, (_, i) => maxRound - i);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Champion banner */}
       {tournament.phase === 'complete' && champion && (
         <div className="bg-gradient-to-r from-yellow-500/20 to-amber-500/10 border border-yellow-500/40 rounded-2xl p-5 text-center">
@@ -142,7 +121,7 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
             <DollarSign className="w-4 h-4 text-emerald-400" />
             <p className="text-sm font-semibold text-gray-300">Prize Payouts</p>
             <span className="text-gray-500 text-xs ml-auto">
-              Total: {fmt(totalPot)}
+              Pot: {fmt(tournament.entryFeePerPlayer * tournament.players.length)}
             </span>
           </div>
           <div className="space-y-2">
@@ -164,104 +143,114 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
         </div>
       )}
 
-      {/* Bracket rounds */}
-      {rounds.map((round) => {
-        const roundMatches = tournament.eliminationMatches
-          .filter((m) => m.round === round)
-          .sort((a, b) => a.position - b.position);
-        const label = ROUND_LABELS[round] ?? `Round of ${Math.pow(2, round)}`;
+      {/* View toggle */}
+      <div className="flex bg-gray-800/60 rounded-xl p-1 gap-1">
+        {(['bracket', 'list'] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={cn(
+              'flex-1 py-2 text-sm font-medium rounded-lg transition-all capitalize',
+              view === v ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300'
+            )}
+          >
+            {v === 'bracket' ? '🏆 Bracket' : '☰ List'}
+          </button>
+        ))}
+      </div>
 
-        return (
-          <div key={round}>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              {label}
-            </p>
-            <div className="space-y-2">
-              {roundMatches.map((match) => {
-                const done = match.status === 'complete';
-                const isBye = match.isBye;
-                const canPlay = !!match.team1Id && !!match.team2Id && !isBye;
+      {/* Bracket view */}
+      {view === 'bracket' && (
+        <BracketView
+          tournament={tournament}
+          onMatchClick={openScoreDialog}
+        />
+      )}
 
-                return (
-                  <button
-                    key={match.id}
-                    onClick={() => canPlay && openScoreDialog(match)}
-                    className={cn(
-                      'w-full p-4 rounded-xl border text-left transition-all',
-                      isBye ? 'bg-gray-800/20 border-gray-800 opacity-50 cursor-default' :
-                      done ? 'bg-gray-800/40 border-gray-700/50' :
-                      canPlay ? 'bg-gray-800 border-gray-700 hover:border-violet-500/50' :
-                      'bg-gray-800/40 border-gray-700/40 cursor-default'
-                    )}
-                  >
-                    {isBye ? (
-                      <p className="text-gray-600 text-sm text-center">BYE</p>
-                    ) : (
-                      <div className="flex items-center gap-3">
-                        {/* Team 1 */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            {tournament.teams.find((t) => t.id === match.team1Id)?.seed && (
-                              <span className="text-gray-600 text-xs">
-                                #{tournament.teams.find((t) => t.id === match.team1Id)?.seed}
-                              </span>
-                            )}
-                            <p className={cn(
-                              'font-semibold text-sm truncate',
-                              done && match.winnerId === match.team1Id ? 'text-emerald-400' :
-                              match.team1Id ? 'text-white' : 'text-gray-600'
-                            )}>
-                              {teamName(match.team1Id)}
-                            </p>
-                          </div>
-                        </div>
+      {/* List view */}
+      {view === 'list' && (
+        <div className="space-y-5">
+          {rounds.map((round) => {
+            const roundMatches = tournament.eliminationMatches
+              .filter((m) => m.round === round)
+              .sort((a, b) => a.position - b.position);
+            const label = ROUND_LABELS[round] ?? `Round of ${Math.pow(2, round)}`;
 
-                        {/* Score */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          {done ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className={cn('text-lg font-bold', match.winnerId === match.team1Id ? 'text-emerald-400' : 'text-gray-400')}>
-                                {match.team1Score}
-                              </span>
-                              <span className="text-gray-600 text-sm">–</span>
-                              <span className={cn('text-lg font-bold', match.winnerId === match.team2Id ? 'text-emerald-400' : 'text-gray-400')}>
-                                {match.team2Score}
-                              </span>
-                              <CheckCircle2 className="w-4 h-4 text-emerald-500 ml-1" />
+            return (
+              <div key={round}>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  {label}
+                </p>
+                <div className="space-y-2">
+                  {roundMatches.map((match) => {
+                    const done = match.status === 'complete';
+                    const isBye = match.isBye;
+                    const canPlay = !!match.team1Id && !!match.team2Id && !isBye;
+
+                    return (
+                      <button
+                        key={match.id}
+                        onClick={() => canPlay && openScoreDialog(match)}
+                        className={cn(
+                          'w-full p-4 rounded-xl border text-left transition-all',
+                          isBye ? 'opacity-30 cursor-default bg-gray-900 border-gray-800' :
+                          done ? 'bg-gray-800/40 border-gray-700/50' :
+                          canPlay ? 'bg-gray-800 border-gray-700 hover:border-violet-500/50' :
+                          'bg-gray-800/40 border-gray-700/40 cursor-default'
+                        )}
+                      >
+                        {isBye ? (
+                          <p className="text-gray-600 text-sm text-center">BYE</p>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                {tournament.teams.find(t => t.id === match.team1Id)?.seed && (
+                                  <span className="text-gray-600 text-xs">#{tournament.teams.find(t => t.id === match.team1Id)?.seed}</span>
+                                )}
+                                <p className={cn('font-semibold text-sm truncate',
+                                  done && match.winnerId === match.team1Id ? 'text-emerald-400' :
+                                  match.team1Id ? 'text-white' : 'text-gray-600 italic'
+                                )}>
+                                  {teamName(match.team1Id)}
+                                </p>
+                              </div>
                             </div>
-                          ) : canPlay ? (
-                            <span className="text-gray-600 text-xs">vs</span>
-                          ) : (
-                            <Clock className="w-4 h-4 text-gray-700" />
-                          )}
-                        </div>
-
-                        {/* Team 2 */}
-                        <div className="flex-1 min-w-0 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <p className={cn(
-                              'font-semibold text-sm truncate',
-                              done && match.winnerId === match.team2Id ? 'text-emerald-400' :
-                              match.team2Id ? 'text-white' : 'text-gray-600'
-                            )}>
-                              {teamName(match.team2Id)}
-                            </p>
-                            {tournament.teams.find((t) => t.id === match.team2Id)?.seed && (
-                              <span className="text-gray-600 text-xs">
-                                #{tournament.teams.find((t) => t.id === match.team2Id)?.seed}
-                              </span>
-                            )}
+                            <div className="shrink-0">
+                              {done ? (
+                                <div className="flex items-center gap-1">
+                                  <span className={cn('text-lg font-bold', match.winnerId === match.team1Id ? 'text-emerald-400' : 'text-gray-400')}>{match.team1Score}</span>
+                                  <span className="text-gray-600">–</span>
+                                  <span className={cn('text-lg font-bold', match.winnerId === match.team2Id ? 'text-emerald-400' : 'text-gray-400')}>{match.team2Score}</span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-600 text-xs font-bold">vs</span>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <p className={cn('font-semibold text-sm truncate',
+                                  done && match.winnerId === match.team2Id ? 'text-emerald-400' :
+                                  match.team2Id ? 'text-white' : 'text-gray-600 italic'
+                                )}>
+                                  {teamName(match.team2Id)}
+                                </p>
+                                {tournament.teams.find(t => t.id === match.team2Id)?.seed && (
+                                  <span className="text-gray-600 text-xs">#{tournament.teams.find(t => t.id === match.team2Id)?.seed}</span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Score dialog */}
       <Dialog open={!!selectedMatch} onOpenChange={() => setSelectedMatch(null)}>
@@ -274,46 +263,23 @@ export default function EliminationView({ tournament, onUpdate }: EliminationVie
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <p className="text-sm text-gray-300 flex-1 truncate">{teamName(selectedMatch.team1Id)}</p>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={score1}
-                    onChange={(e) => setScore1(e.target.value)}
-                    className="bg-gray-800 border-gray-700 text-white h-11 text-center text-lg font-bold w-20"
-                    placeholder="0"
-                  />
+                  <Input type="number" min={0} value={score1} onChange={(e) => setScore1(e.target.value)}
+                    className="bg-gray-800 border-gray-700 text-white h-11 text-center text-lg font-bold w-20" placeholder="0" autoFocus />
                 </div>
                 <Separator className="bg-gray-700" />
                 <div className="flex items-center gap-3">
                   <p className="text-sm text-gray-300 flex-1 truncate">{teamName(selectedMatch.team2Id)}</p>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={score2}
-                    onChange={(e) => setScore2(e.target.value)}
-                    className="bg-gray-800 border-gray-700 text-white h-11 text-center text-lg font-bold w-20"
-                    placeholder="0"
-                  />
+                  <Input type="number" min={0} value={score2} onChange={(e) => setScore2(e.target.value)}
+                    className="bg-gray-800 border-gray-700 text-white h-11 text-center text-lg font-bold w-20" placeholder="0" />
                 </div>
               </div>
               {score1 !== '' && score2 !== '' && score1 === score2 && (
-                <p className="text-amber-400 text-xs">No ties allowed in elimination — enter different scores</p>
+                <p className="text-amber-400 text-xs">No ties in elimination — enter different scores</p>
               )}
               <div className="flex gap-2 pt-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => setSelectedMatch(null)}
-                  className="flex-1 border border-gray-700 text-gray-400"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={submitScore}
-                  disabled={score1 === '' || score2 === '' || score1 === score2}
-                  className="flex-1 bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40"
-                >
-                  Save Score
-                </Button>
+                <Button variant="ghost" onClick={() => setSelectedMatch(null)} className="flex-1 border border-gray-700 text-gray-400">Cancel</Button>
+                <Button onClick={submitScore} disabled={score1 === '' || score2 === '' || score1 === score2}
+                  className="flex-1 bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40">Save Score</Button>
               </div>
             </div>
           )}
